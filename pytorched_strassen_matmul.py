@@ -120,11 +120,15 @@ print('Matrix Multiplication with PyTorced MatMul Method \n',
        matmul_pytorch(a_matrix, b_matrix), '\n')
 toc = time.perf_counter()
 print(f"PyTorch MatMul Method took {toc - tic:0.4e} seconds")
-#------------------------------------------------------   
+
+#------------------------------------------------------
 # Results
-# Method #1: Standard Method took:               301.77 seconds
-# Method #2: Standard Method with Stressen took: 151.33 seconds
-# Method #3: PyTorched Stressen Method took:      21.222 seconds
-# Method #4: PyTorched MatMul Method took:      
+# Method #1: Standard Method took:               14286.00 seconds
+# Method #2: Standard Method with Stressen took:  5212.60 seconds (x2.74 Faster)
+# Method #3: PyTorched Stressen Method took:       761.03 seconds (x18.77 & x6.84 Faster)
+# Method #4: PyTorch MatMul Method took:	           0.02 seconds (x638K & x233K Faster)
 
 # Conclusion
+# For a Matrix of 1000 X 1000 dimensions and random matrix elements, the Standard/Brute force method is not ideal. Standard Strassen algorithm combined with brute force matrix multiplication method is 2.74 times faster than standard matmul method. Strassen method combined with PyTorched Assemble language powered method is 18.77 times faster than the traditional method and 6.84 times faster than the standard Strassen method. Although the total time consumed decreases with the improved method, PyTorch Assemble language powered MatMul is ~638K times faster than the standard method, 233K times faster than standard Strassen, ~34K times faster than PyTorched Strassen Method.
+
+# In Short: Don't Mess with PyTorch MatMul

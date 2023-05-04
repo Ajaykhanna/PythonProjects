@@ -1,17 +1,37 @@
-snapshots = [7,10,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,30,31,32,33,34,35]
-qm_atoms = [189,195,201,207,195,207,189,189,183,189,189,195,183,183,201,189,195,189,189,189,183,177,201,189,195]
+import sys
 
-for index, i in enumerate(snapshots):
-    with open('mecou_meoh_frame'+str(i)+'_ex.com', 'r') as f:
-        data = f.read()
-        data = data.split('\n')
-        print(f'QM-AToms: {qm_atoms[index]}')
-        data_dye = data[6:33]
-        data_solvent = data[33:qm_atoms[index]+6]
-    with open('optex_geom'+str(i)+'.xyz', 'w') as file:
-        file.write(str(qm_atoms[index])+'\n\n')
-        for line in data_dye:
-            file.write(str(line)+'\n')
-    with open('optex_geom'+str(i)+'.xyz', 'a') as file:
-        for line in data_solvent:
-            file.write(str(line[0]+line[4:])+'\n')
+def main(snapshots, qm_atoms):
+    dye_atoms = 17
+    lines_to_skip = 6  # Gaussian Lines
+
+    for index, snapshot in enumerate(snapshots):
+        with open(f'nbdnh2_dmso_frame{snapshot}_ex.com', 'r') as f:
+            data = f.read().split('\n')
+            print(f'QM-Atoms: {qm_atoms[index]}')
+            data_dye = data[lines_to_skip:lines_to_skip + dye_atoms]
+            data_solvent = data[lines_to_skip + dye_atoms:int(qm_atoms[index]) + lines_to_skip]
+
+        with open(f'optex_geom{snapshot}.xyz', 'w') as file:
+            file.write(f'{qm_atoms[index]}\n\n')
+            file.writelines(f'{line}\n' for line in data_dye)
+
+        with open(f'optex_geom{snapshot}.xyz', 'a') as file:
+            for line in data_solvent:
+                if len(line) > 4:
+                    file.writelines(f'{line[0]}{line[4:]}\n')
+                else:
+                    file.write(line + '\n')
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print("Usage: python script.py <snapshots> <qm_atoms>")
+        sys.exit(1)
+
+    snapshots = sys.argv[1].split(',')
+    qm_atoms = sys.argv[2].split(',')
+
+    if len(snapshots) != len(qm_atoms):
+        print("Error: The number of snapshots and qm_atoms must be equal.")
+        sys.exit(1)
+
+    main(snapshots, qm_atoms)

@@ -9,18 +9,18 @@ import numpy as np
 print("Franck-Condon Principle Demonstration")
 
 # Input parameters
-E = float(input("Enter electronic transition energy (eV): ")) # Example 2.5
+E = float(input("Enter electronic transition energy (eV): "))  # Example 2.5
 w1 = float(input("Enter ground state vibrational frequency (eV): "))  # Example 0.3
-w2 = float(input("Enter excited state vibrational frequency (eV): ")) # Example 0.1
-D = float(input("Enter displacement between potentials (angstrom): ")) # Example 0.5
-T = float(input("Enter temperature (K): ")) # Example 300.0
+w2 = float(input("Enter excited state vibrational frequency (eV): "))  # Example 0.1
+D = float(input("Enter displacement between potentials (angstrom): "))  # Example 0.5
+T = float(input("Enter temperature (K): "))  # Example 300.0
 
 # Calculate vibrational energy levels
-vib_levels1 = w1 * np.arange(31) 
+vib_levels1 = w1 * np.arange(31)
 vib_levels2 = w2 * np.arange(31)
 
-# Calculate FC factors 
-'''
+# Calculate FC factors
+"""
 The equation to calculate the Franck-Condon factors (fc) is:
 
 fc = (S * v') * exp(-S * δ2/2) * (δ^(v' - v"))
@@ -38,21 +38,25 @@ Expansion:
 exp(-S * δ2/2) term: Overlap between ground and excited state wavefunctions
 (δ^(v' - v")) term: Shifting of excited state wavefunctions relative to ground state
 
-'''
+"""
 
-df = w2/w1
-fc = (df**vib_levels1[:,None]) * np.exp(-df*D**2/2) * (D**(vib_levels1[:,None] - vib_levels2[None,:]))
+df = w2 / w1
+fc = (
+    (df ** vib_levels1[:, None])
+    * np.exp(-df * D**2 / 2)
+    * (D ** (vib_levels1[:, None] - vib_levels2[None, :]))
+)
 
-# Calculate intensities 
-ints = fc**2 * np.exp(-vib_levels1[:,None]/T)
+# Calculate intensities
+ints = fc**2 * np.exp(-vib_levels1[:, None] / T)
 
 # Plot
 plt.figure()
 for i in range(31):
-    plt.vlines(E + vib_levels2[i], 0, ints[i].max(), colors='C0', lw=1.5)
-plt.xlabel('Energy (eV)')
-plt.ylabel('Intensity (a.u.)')
-plt.title('Franck-Condon Spectrum')
+    plt.vlines(E + vib_levels2[i], 0, ints[i].max(), colors="C0", lw=1.5)
+plt.xlabel("Energy (eV)")
+plt.ylabel("Intensity (a.u.)")
+plt.title("Franck-Condon Spectrum")
 plt.show()
 
 print("Spectrum displayed!")

@@ -11,6 +11,8 @@ In essence, we are scaling the ratio of points by the area of the square to get 
 """
 
 import random
+
+
 def monte_carlo_circle_area(radius, num_points):
     """
     The function `monte_carlo_circle_area` estimates the area of a circle using the Monte Carlo method

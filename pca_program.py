@@ -3,6 +3,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn import datasets
 
+
 class PCA:
     def fit_transform(self, X, n_components=2):
         # get number of samples and components
@@ -23,24 +24,25 @@ class PCA:
         numerator = X - np.mean(X, axis=0)
         denominator = np.std(X, axis=0)
         return numerator / denominator
-    
+
     def get_covariance_matrix(self, ddof=0):
         # calculate covariance matrix with standardized matrix A
-        C = np.dot(self.A.T, self.A) / (self.n_samples-ddof)
+        C = np.dot(self.A.T, self.A) / (self.n_samples - ddof)
         return C
 
     def get_eigenvectors(self, C):
         # calculate eigenvalues & eigenvectors of covariance matrix 'C'
         eigenvalues, eigenvectors = np.linalg.eig(C)
         # sort eigenvalues descending and select columns based on n_components
-        n_cols = np.argsort(eigenvalues)[::-1][:self.n_components]
+        n_cols = np.argsort(eigenvalues)[::-1][: self.n_components]
         selected_vectors = eigenvectors[:, n_cols]
         return selected_vectors
 
     def project_matrix(self, eigenvectors):
         P = np.dot(self.A, eigenvectors)
         return P
-      
+
+
 # Testing PCA
 if __name__ == "__main__":
     # load iris dataset
@@ -53,17 +55,13 @@ if __name__ == "__main__":
     X_pca = pca.fit_transform(X, n_components=2)
 
     # plot results
-    fig, ax = plt.subplots(1, 1, figsize=(10,6))
+    fig, ax = plt.subplots(1, 1, figsize=(10, 6))
 
-    sns.scatterplot(
-        x = X_pca[:,0],
-        y = X_pca[:,1],
-        hue=y
-    )
+    sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=y)
 
-    ax.set_title('Iris Dataset')
-    ax.set_xlabel('PC1')
-    ax.set_ylabel('PC2')
+    ax.set_title("Iris Dataset")
+    ax.set_xlabel("PC1")
+    ax.set_ylabel("PC2")
 
     sns.despine()
     plt.show()

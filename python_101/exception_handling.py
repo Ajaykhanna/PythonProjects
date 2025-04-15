@@ -24,10 +24,12 @@ except ZeroDivisionError:
 except Exception as e:
     print("An Error occurred:", e)
 
+
 # Level - 1
 # Function with exception handling
 def divide(x, y):
     return x / y
+
 
 def calculate(a, b):
     try:
@@ -35,6 +37,7 @@ def calculate(a, b):
         print("Result:", result)
     except ZeroDivisionError:
         print("You can't divide a number by zero!")
+
 
 calculate(10, 0)
 
@@ -46,12 +49,14 @@ except ZeroDivisionError:
 finally:
     print("Calculation finished")
 
+
 # Raise an Exception Deliberatively
 def calculate(a, b):
     try:
         raise Exception("I just want to raise an exception!")
     except Exception as e:
         print(e)
+
 
 calculate(10, 0)
 
@@ -69,6 +74,7 @@ finally:
 # The Warning Module
 import warnings
 
+
 def calculate(x, y):
     try:
         result = x / y
@@ -79,7 +85,9 @@ def calculate(x, y):
             warnings.warn("All numbers divide by 1 will remain the same.")
         print("Result: ", result)
 
+
 calculate(10, 1)
+
 
 # Assertion — Another Way of Raising an Exception
 def calculate(x, y):
@@ -87,7 +95,9 @@ def calculate(x, y):
     result = x / y
     print("Result: ", result)
 
+
 calculate(10, 0)
+
 
 # Custom Exception Type
 class CustomException(Exception):
@@ -97,15 +107,16 @@ class CustomException(Exception):
     def __str__(self):
         return f"A customized exception has occurred: {self.args[0]}"
 
+
 raise CustomException("This is a custom exception")
 
 # Level-3
 # The Suppress Module
 from contextlib import suppress
 
-nums = [3, -1, -2, 1, 1, 0, 3, 1, -2, 1, 0, -1, -1, -1, 3, -2, -1, 3, '3', -1] 
+nums = [3, -1, -2, 1, 1, 0, 3, 1, -2, 1, 0, -1, -1, -1, 3, -2, -1, 3, "3", -1]
 
 result = 0
 for num in nums:
     with suppress(ZeroDivisionError, TypeError):
-        result += 1/num
+        result += 1 / num

@@ -1,25 +1,40 @@
-#! /usr/bin/env python
-# Creating On-Demand TeraChem Input Files
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
-# Printing Developer Information
-print("*********| Chef-TeraChem | **********")
-print(
-    " A python script to create on-demand TeraChem input files for various types of calculations"
-)
-print("Require python >=3, last-tested with python=3.6 on Oct.10.2020")
-print("Written by Ajay Khanna")
-print("Oct.10.2020 | UC-Merced | Dr. Isborb's Lab")
-print()
+"""
+Chef-TeraChem: A Python script to generate TeraChem input files.
 
-# Print Script Capababilities
-print("Current Options:")
-print(
-    "Gs-Energy[0], Gs-Optimization[1], Gs-Frequency[2], Ex-Energy[3] Ex-Optimization[4], Ex-Frequency[5]"
-)
-print("Example type 1 for Ground state optimization")
+This script prompts the user for calculation parameters and generates
+an appropriate TeraChem input file (.in) for various quantum chemistry
+calculations, including options for ground state, excited state,
+energy, optimization, frequency, and implicit solvent effects (COSMO).
+"""
 
-# List of Solvent's dielectric constants (Taken from Gaussian (http://gaussian.com/scrf/) last accessed: Oct.10.2020)
-solvent_list = {
+import sys
+from typing import Dict, Optional, Any, Tuple
+
+# --- Constants and Configuration ---
+
+__version__ = "1.1.0"  # Refactored version
+__author__ = "Ajay Khanna (Original), Refactored by AI"
+__date__ = "Oct.10.2020 (Original), April 21, 2025 (Refactored)"
+__lab__ = "Dr. Isborb's Lab | UC-Merced"
+
+# Mapping of calculation type codes to descriptive names and run types
+CALC_TYPE_MAP: Dict[int, Tuple[str, str]] = {
+    0: ("gs_energy", "energy"),
+    1: ("gs_opt", "minimize"),
+    2: ("gs_freq", "frequencies"),
+    3: ("ex_energy", "energy"),
+    4: ("ex_opt", "minimize"),
+    5: ("ex_freq", "frequencies"),
+}
+# Calculation types requiring excited state ('cis') options
+EXCITED_STATE_CALCS: Tuple[int, ...] = (3, 4, 5)
+
+# Solvent dielectric constants (Source: Gaussian website, Oct 10, 2020)
+# Moved here for clarity, could be in a separate JSON/YAML/module
+SOLVENT_DIELECTRICS: Dict[str, float] = {
     "water": 78.3553,
     "acetonitrile": 35.688,
     "methanol": 32.613,
@@ -206,450 +221,332 @@ solvent_list = {
     "z-1,2-dichloroethene": 9.2,
 }
 
-# User Inputs For The Molecule
-mol_name = str(input("Enter the name of the Molecule: "))
-print(
-    "Note you should have your {0} xyz file located in the same folder or you can provide path to file".format(
-        mol_name
-    )
-)
-calc_type = int(
-    input("Enter the type of calculation you are interested(0,1,2,3,4,5): ")
-)
-funcnl_type = str(input("Enter the name of the functional: "))
-basis_set_type = str(input("Enter the basis-set: "))
-charge = int(input("Enter the charge: "))
-multiplicity = int(input("Enter the multiplicity: "))
-if calc_type >= 3:
-    exst = "y"
-else:
-    exst = "n"
+DEFAULT_GPUS: int = 4
+DEFAULT_CIS_NUMSTATES: int = 6
+DEFAULT_CIS_GUESVECS_FACTOR: int = 2  # cisguessvecs = factor * cisnumstates
+DEFAULT_CISTARGET: int = 1
 
-# Include Solvent Effects
-cosmo = str(input("Turn on Solvent Effects?(y/n): "))
-epsilon = []
-if cosmo == "y":
-    solvet = [str(input("Enter the name of the solvent: ")).lower()]
-    # Substring Key match in dictionary
-    res = [solvent_list[key] for key in solvet]
-    epsilon.append(res[0])
-    # print(res[0])
+# --- Helper Functions ---
 
-# 1. Ground State Gas Phase Energy Calculations
-if (calc_type == 0) and (cosmo == "n"):
-    f = open("{0}_gs_energy.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} ground state energy calculations in gas phase\n".format(
-            mol_name
-        )
+
+def print_header() -> None:
+    """Prints the script header and developer information."""
+    print("*********| Chef-TeraChem | **********")
+    print(" A python script to create on-demand TeraChem input files.")
+    print(f" Version: {__version__} (Refactored)")
+    print(f" Based on original script by: {__author__.split('(')[0].strip()}")
+    print(f" Original Date: {__date__.split(',')[0].strip()}")
+    print(f" Lab: {__lab__}")
+    print("-" * 40)
+    print("Current Calculation Options:")
+    for code, (name, _) in CALC_TYPE_MAP.items():
+        state = "Ground State" if "gs" in name else "Excited State"
+        calc = name.split("_")[1].capitalize()
+        print(f"  {code}: {state} {calc}")
+    print("-" * 40)
+
+
+def get_validated_input(
+    prompt: str, input_type: type = str, validation_func: Optional[callable] = None
+) -> Any:
+    """
+    Prompts the user for input, validates it, and converts to the desired type.
+
+    Args:
+        prompt: The message to display to the user.
+        input_type: The desired type of the output (e.g., str, int, float).
+        validation_func: An optional function to perform custom validation.
+                         Should accept the raw input and return True if valid,
+                         False otherwise.
+
+    Returns:
+        The validated user input, converted to input_type.
+
+    Raises:
+        ValueError: If input cannot be converted to the specified type.
+        SystemExit: If validation fails repeatedly or input type is invalid.
+    """
+    while True:
+        try:
+            user_input_str = input(prompt).strip()
+            # Perform type conversion first
+            converted_input = input_type(user_input_str)
+
+            # Perform custom validation if provided
+            if validation_func:
+                if validation_func(converted_input):
+                    return converted_input
+                else:
+                    print("Invalid input. Please try again.")
+            else:
+                # No custom validation needed, return converted input
+                return converted_input
+
+        except ValueError:
+            print(f"Invalid input. Please enter a valid {input_type.__name__}.")
+        except EOFError:
+            print("\nInput stream closed. Exiting.")
+            sys.exit(1)
+        except KeyboardInterrupt:
+            print("\nOperation cancelled by user. Exiting.")
+            sys.exit(1)
+
+
+def get_calculation_parameters() -> Dict[str, Any]:
+    """
+    Collects all necessary calculation parameters from the user.
+
+    Returns:
+        A dictionary containing the user-specified parameters.
+    """
+    params: Dict[str, Any] = {}
+
+    params["mol_name"] = get_validated_input("Enter the name of the Molecule: ", str)
+    print(
+        f"Note: Ensure '{params['mol_name']}.xyz' exists or provide the full path later."
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename (or path) \n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 energy\n")
-    f.write("# Hardware Information\n")
-    f.write("gpus                4\n")
-    f.write("safemode            no\n")
-    f.write(
-        "# Controlling Precison and DFT-Grid (Expert Options, read manual before removing '#'sign)\n"
+
+    params["calc_type"] = get_validated_input(
+        f"Enter calculation type code ({', '.join(map(str, CALC_TYPE_MAP.keys()))}): ",
+        int,
+        lambda x: x in CALC_TYPE_MAP,
     )
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("#end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 2. Ground State Implicit Solvent Energy Calculations
-elif (calc_type == 0) and (cosmo == "y"):
-    f = open("{0}_gs_energy_cosmo.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} ground state energy calculations in cosmo\n".format(mol_name)
+
+    params["functional"] = get_validated_input(
+        "Enter the name of the functional (e.g., b3lyp): ", str
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename\n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 energy\n")
-    f.write("# Solvent model and dielectric constant\n")  # Turning on Terachem COSMO
-    f.write("pcm                 cosmo\n")
-    f.write("epsilon             {0}\n".format(epsilon[0]))
-    f.write("# Hardware Information\n")
-    f.write("gpu                 4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'sign \n")
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#pcmgrid_h          7\n")
-    f.write("#pcmgrid_heavy      7\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 3. Ground State Gas Phase Optimization
-elif (calc_type == 1) and (cosmo == "n"):
-    f = open("{0}_gs_opt.in".format(mol_name), "w")
-    f.write("# Job info: {0} ground state optimization in Gas Phase\n".format(mol_name))
-    f.write("#\n")
-    f.write("# {0} coordinate filename (or path) \n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 minimize\n")
-    f.write("new_minimizer       yes\n")
-    f.write("# Hardware Information\n")
-    f.write("gpus                4\n")
-    f.write("safemode            no\n")
-    f.write(
-        "# Controlling Precison and DFT-Grid (Expert Options, read manual before removing '#'sign)\n"
+    params["basis_set"] = get_validated_input(
+        "Enter the basis-set (e.g., 6-31g*): ", str
     )
-    f.write("#precision           double\n")
-    f.write("#threall             1.0e-15\n")
-    f.write("#convthre            3.0e-07\n")
-    f.write("#dftgrid             5\n")
-    f.write("#end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 4. Ground State Implicit Solvent Optimization
-elif (calc_type == 1) and (cosmo == "y"):
-    f = open("{0}_gs_cosmo_opt.in".format(mol_name), "w")
-    f.write("# Job info: {0} ground state cosmo optimization\n".format(mol_name))
-    f.write("#\n")
-    f.write("# {0} coordinate filename\n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 minimize\n")
-    f.write("new_minimizer       yes\n")
-    f.write("# Solvent model and dielectric constant\n")  # Turning on Terachem COSMO
-    f.write("pcm                 cosmo\n")
-    f.write("epsilon             {0}\n".format(epsilon[0]))
-    f.write("# Hardware Information\n")
-    f.write("gpu                 4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'-sign \n")
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 5. Ground State Gas Phase Frequency Calculations
-elif (calc_type == 2) and (cosmo == "n"):
-    f = open("{0}_gs_freq.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} ground state frequency calculations in gas phase\n".format(
-            mol_name
-        )
+    params["charge"] = get_validated_input("Enter the charge: ", int)
+    params["multiplicity"] = get_validated_input("Enter the multiplicity: ", int)
+
+    # Determine if solvent effects should be included
+    cosmo_input = get_validated_input(
+        "Include Solvent Effects (COSMO)? (y/n): ",
+        str,
+        lambda x: x.lower() in ["y", "n"],
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename (or path) \n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 frequencies\n")
-    f.write("mincheck            false\n")  # Default=True
-    f.write("# Hardware Information\n")
-    f.write("gpus                4\n")
-    f.write("safemode            no\n")
-    f.write(
-        "# Controlling Precison and DFT-Grid (Expert Options, read manual before removing '#'sign)\n"
+    params["use_solvent"] = cosmo_input.lower() == "y"
+    params["solvent_name"] = None
+    params["epsilon"] = None
+
+    if params["use_solvent"]:
+        while params["epsilon"] is None:
+            solvent_name_input = get_validated_input(
+                "Enter the name of the solvent: ", str
+            )
+            params["solvent_name"] = solvent_name_input.lower()
+            params["epsilon"] = SOLVENT_DIELECTRICS.get(params["solvent_name"])
+            if params["epsilon"] is None:
+                print(
+                    f"Error: Solvent '{solvent_name_input}' not found in the list. Please try again."
+                )
+                # Optional: List available solvents here if needed
+                # print("Available solvents:", ", ".join(SOLVENT_DIELECTRICS.keys()))
+
+    # Set default excited state parameters (can be overridden later if needed)
+    params["is_excited_state"] = params["calc_type"] in EXCITED_STATE_CALCS
+    params["cis_target"] = DEFAULT_CISTARGET
+    params["cis_numstates"] = DEFAULT_CIS_NUMSTATES
+    params["cis_guessvecs"] = DEFAULT_CIS_NUMSTATES * DEFAULT_CISTARGET
+
+    # Set run type based on calc_type
+    params["run_type"] = CALC_TYPE_MAP[params["calc_type"]][1]
+
+    return params
+
+
+def generate_terachem_input(params: Dict[str, Any]) -> str:
+    """
+    Generates the TeraChem input file content as a string based on parameters.
+
+    Args:
+        params: A dictionary containing the calculation parameters.
+
+    Returns:
+        A string containing the formatted TeraChem input file content.
+    """
+    mol_name = params["mol_name"]
+    calc_name, _ = CALC_TYPE_MAP[params["calc_type"]]
+    solvent_desc = (
+        f"in {params['solvent_name']} (COSMO)"
+        if params["use_solvent"]
+        else "in gas phase"
     )
-    f.write("#precision           double\n")
-    f.write("#threall             1.0e-15\n")
-    f.write("#convthre            3.0e-07\n")
-    f.write("#dftgrid             5\n")
-    f.write("#end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 6. Ground State Implicit Solvent Frequency Calculations
-elif (calc_type == 2) and (cosmo == "y"):
-    f = open("{0}_gs_cosmo_freq.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} ground state requency calculations in cosmo\n".format(mol_name)
+    state_desc = "Excited state" if params["is_excited_state"] else "Ground state"
+    job_desc = (
+        f"{mol_name} {state_desc} {calc_name.split('_')[1]} calculation {solvent_desc}"
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename\n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 frequencies\n")
-    f.write("mincheck            false\n")
-    f.write("# Solvent model and dielectric constant\n")  # Turning on Terachem COSMO
-    f.write("pcm                 cosmo\n")
-    f.write("epsilon             {0}\n".format(epsilon[0]))
-    f.write("# Hardware Information\n")
-    f.write("gpu                 4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'-sign \n")
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 5. Excited State Gas Phase Energy Calculations
-elif (calc_type == 3) and (cosmo == "n"):
-    f = open("{0}_ex_energy.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} excited state energy calculations in gas phase\n".format(
-            mol_name
-        )
+
+    # --- Template Sections ---
+    header_tmpl = f"""\
+# Job info: {job_desc}
+# Generated by Chef-TeraChem (Refactored v{__version__})
+#
+"""
+
+    coordinates_tmpl = f"""\
+# Coordinate file (ensure '{mol_name}.xyz' is accessible)
+coordinates        {mol_name.lower()}.xyz
+"""
+
+    charge_mult_tmpl = f"""\
+# Charge & Multiplicity
+charge             {params['charge']}
+spinmult           {params['multiplicity']}
+"""
+
+    method_basis_run_tmpl = f"""\
+# Basis Set, Method (Functional), and Run Type
+basis              {params['basis_set']}
+method             {params['functional'].lower()}
+run                {params['run_type']}
+"""
+
+    # Specific options for optimization runs
+    minimizer_tmpl = (
+        """\
+# Optimization specific options
+new_minimizer      yes
+"""
+        if params["run_type"] == "minimize"
+        else ""
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename (or path) \n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type))
-    f.write("run                 energy\n")
-    f.write("# Excited sate of interest\n")
-    f.write("cis                 yes\n")  # Turn on excited state calculation
-    f.write(
-        "cistarget           1\n"
-    )  # Target state of interest (State for which optimization will proceed)
-    f.write("cisnumstates        6\n")  # Total number of states to be solved
-    f.write("cisguessvecs        12\n")
-    f.write("# Hardware Information\n")
-    f.write("gpus                4\n")
-    f.write("safemode            no\n")
-    f.write(
-        "# Expert options read the mannual before removing '#'sign \n"
-    )  # Expert Options
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 6. Excited State Implicit Solvent Energy Calculations
-elif (calc_type == 3) and (cosmo == "y"):
-    f = open("{0}_ex_cosmo_energy.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} Excited state energy calculations in cosmo\n".format(mol_name)
+
+    # Specific options for frequency runs
+    frequency_tmpl = (
+        """\
+# Frequency specific options
+mincheck           false
+"""
+        if params["run_type"] == "frequencies"
+        else ""
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename\n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 energy\n")
-    f.write("# Solvent model and dielectric constant\n")  # Turning on Terachem COSMO
-    f.write("pcm                 cosmo\n")
-    f.write("epsilon             {0}\n".format(epsilon[0]))
-    f.write("# Excited sate options\n")
-    f.write("cis                 yes\n")  # Turn on excited state calculation
-    f.write(
-        "cistarget           1\n"
-    )  # Target state of interest (State for which optimization will proceed)
-    f.write("cisnumstates        6\n")  # Total number of states to be solved
-    f.write("cisguessvecs        12\n")
-    f.write("# Hardware Information\n")
-    f.write("gpu                 4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'-sign \n")
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 7. Excited State Gas Phase Optimization
-elif (calc_type == 4) and (cosmo == "n"):
-    f = open("{0}_ex_opt.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} Excited state optimization in gas phase\n".format(mol_name)
+
+    solvent_tmpl = (
+        f"""\
+# Solvent model (COSMO) and dielectric constant
+pcm                cosmo
+epsilon            {params['epsilon']:.4f}
+"""
+        if params["use_solvent"]
+        else ""
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename (or path) \n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type))
-    f.write("run                 minimize\n")
-    f.write("new_minimizer       yes\n")
-    f.write("# Excited sate of interest\n")
-    f.write("cis                 yes\n")  # Turn on excited state calculation
-    f.write(
-        "cistarget           1\n"
-    )  # Target state of interest (State for which optimization will proceed)
-    f.write("cisnumstates        6\n")  # Total number of states to be solved
-    f.write("cisguessvecs        12\n")
-    f.write("# Hardware Information\n")
-    f.write("gpus                4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'sign \n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 8. Excited State Implicit Solvent Optimization
-elif (calc_type == 4) and (cosmo == "y"):
-    f = open("{0}_ex_cosmo_opt.in".format(mol_name), "w")
-    f.write("# Job info: {0} Excited state optimization in cosmo\n".format(mol_name))
-    f.write("#\n")
-    f.write("# {0} coordinate filename\n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 minimize\n")
-    f.write("new_minimizer       yes\n")
-    f.write("# Solvent model and dielectric constant\n")  # Turning on Terachem COSMO
-    f.write("pcm                 cosmo\n")
-    f.write("epsilon             {0}\n".format(epsilon[0]))
-    f.write("# Excited sate options\n")
-    f.write("cis                 yes\n")  # Turn on excited state calculation
-    f.write(
-        "cistarget           1\n"
-    )  # Target state of interest (State for which optimization will proceed)
-    f.write("cisnumstates        6\n")  # Total number of states to be solved
-    f.write("cisguessvecs        12\n")
-    f.write("# Hardware Information\n")
-    f.write("gpu                 4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'sign \n")
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 9. Excited State Gas Phase Frequency calculations
-elif (calc_type == 5) and (cosmo == "n"):
-    f = open("{0}_ex_freq.in".format(mol_name), "w")
-    f.write("# Job info: {0} Excited state frequency calculations\n".format(mol_name))
-    f.write("#\n")
-    f.write("# {0} coordinate filename (or path) \n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type))
-    f.write("run                 frequencies\n")
-    f.write("mincheck            false\n")
-    f.write("# Excited sate of interest\n")
-    f.write("cis                 yes\n")  # Turn on excited state calculation
-    f.write(
-        "cistarget           1\n"
-    )  # Target state of interest (State for which optimization will proceed)
-    f.write("cisnumstates        6\n")  # Total number of states to be solved
-    f.write("cisguessvecs        12\n")
-    f.write("# Hardware Information\n")
-    f.write("gpus                4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'sign \n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# ------------------------------------------------------------------------------------------------------------
-# 10. Excited State Implicit Solvent Frequency Calculations
-elif (calc_type == 5) and (cosmo == "y"):
-    f = open("{0}_ex_cosmo_freq.in".format(mol_name), "w")
-    f.write(
-        "# Job info: {0} Excited state frequency calculations in cosmo\n".format(
-            mol_name
-        )
+
+    excited_state_tmpl = (
+        f"""\
+# Excited state options (TD-DFT/CIS)
+cis                yes
+cistarget          {params['cis_target']}
+cisnumstates       {params['cis_numstates']}
+cisguessvecs       {params['cis_guessvecs']}
+"""
+        if params["is_excited_state"]
+        else ""
     )
-    f.write("#\n")
-    f.write("# {0} coordinate filename\n".format(mol_name))
-    f.write("coordinates         {0}.xyz\n".format(mol_name).lower())
-    f.write("# Charge & Multiplicity \n")
-    f.write("charge              {0}\n".format(charge))
-    f.write("spinmult            {0}\n".format(multiplicity))
-    f.write("# Basis-Sets, Level of theory & Type of Job\n")
-    f.write("basis               {0}\n".format(basis_set_type))
-    f.write("method              {0}\n".format(funcnl_type).lower())
-    f.write("run                 frequencies\n")
-    f.write("mincheck            false\n")
-    f.write("# Solvent model and dielectric constant\n")  # Turning on Terachem COSMO
-    f.write("pcm                 cosmo\n")
-    f.write("epsilon             {0}\n".format(epsilon[0]))
-    f.write("# Excited sate options\n")
-    f.write("cis                 yes\n")  # Turn on excited state calculation
-    f.write(
-        "cistarget           1\n"
-    )  # Target state of interest (State for which optimization will proceed)
-    f.write("cisnumstates        6\n")  # Total number of states to be solved
-    f.write("cisguessvecs        12\n")
-    f.write("# Hardware Information\n")
-    f.write("gpu                 4\n")
-    f.write("safemode            no\n")
-    f.write("# Expert options read the mannual before removing '#'sign \n")
-    f.write("#pcm_scale          1\n")
-    f.write("#pcm_grid           lebedev\n")
-    f.write("#precision          double\n")
-    f.write("#threall            1.0e-15\n")
-    f.write("#convthre           3.0e-07\n")
-    f.write("#dftgrid            5\n")
-    f.write("end")
-    f.close()
-# -------------------------------------------------------------------------------------------------------------
-print("Task Completed Successfully")
-print("Buy the developer a beer")
+
+    hardware_tmpl = f"""\
+# Hardware Information (Adjust as needed)
+gpus               {DEFAULT_GPUS}
+safemode           no
+"""
+
+    expert_opts_tmpl = """\
+# Expert options (Uncomment and modify with caution, refer to TeraChem manual)
+#precision         double
+#threall           1.0e-15
+#convthre          3.0e-07
+#dftgrid           5
+"""
+
+    pcm_expert_opts_tmpl = (
+        """\
+# PCM Expert options (Uncomment and modify with caution)
+#pcm_scale         1
+#pcm_grid          lebedev
+#pcmgrid_h         7
+#pcmgrid_heavy     7
+"""
+        if params["use_solvent"]
+        else ""
+    )
+
+    footer_tmpl = "end\n"
+
+    # --- Assemble the input file content ---
+    content = (
+        header_tmpl
+        + coordinates_tmpl
+        + charge_mult_tmpl
+        + method_basis_run_tmpl
+        + minimizer_tmpl
+        + frequency_tmpl
+        + solvent_tmpl
+        + excited_state_tmpl
+        + hardware_tmpl
+        + expert_opts_tmpl
+        + pcm_expert_opts_tmpl  # Add PCM expert options if solvent is used
+        + footer_tmpl
+    )
+
+    return content
+
+
+def write_input_file(filename: str, content: str) -> None:
+    """
+    Writes the generated content to the specified file.
+
+    Args:
+        filename: The name of the file to write.
+        content: The string content to write to the file.
+    """
+    try:
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(content)
+        print(f"\nSuccessfully generated TeraChem input file: '{filename}'")
+    except IOError as e:
+        print(f"\nError: Could not write file '{filename}'. Reason: {e}")
+        sys.exit(1)
+
+
+def generate_filename(params: Dict[str, Any]) -> str:
+    """
+    Generates a descriptive filename for the input file.
+
+    Args:
+        params: Dictionary of calculation parameters.
+
+    Returns:
+        A string representing the suggested filename.
+    """
+    base_name = params["mol_name"]
+    calc_suffix, _ = CALC_TYPE_MAP[params["calc_type"]]
+    solvent_suffix = "_cosmo" if params["use_solvent"] else ""
+    return f"{base_name}_{calc_suffix}{solvent_suffix}.in"
+
+
+# --- Main Execution ---
+
+
+def main() -> None:
+    """Main function to run the script."""
+    print_header()
+    try:
+        parameters = get_calculation_parameters()
+        input_content = generate_terachem_input(parameters)
+        output_filename = generate_filename(parameters)
+        write_input_file(output_filename, input_content)
+        print("\nTask Completed Successfully.")
+        print("Consider buying the original developer a beer!")  # Keeping the spirit :)
+    except Exception as e:
+        print(f"\nAn unexpected error occurred: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    # Ensure Python 3.6+ for f-strings and type hints
+    if sys.version_info < (3, 6):
+        print("Error: This script requires Python 3.6 or later.")
+        sys.exit(1)
+    main()

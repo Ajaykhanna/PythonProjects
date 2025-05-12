@@ -16,6 +16,7 @@ Features:
 - Options configured in the sidebar.
 - Handles errors gracefully during processing.
 - Packages converted images into a downloadable ZIP archive.
+- Provides a direct download button if only one image is converted successfully.
 
 Requires: streamlit, Pillow
 Optional for SVG support: CairoSVG
@@ -85,6 +86,17 @@ RESIZE_METHODS = {
     "NEAREST (Fastest)": Image.Resampling.NEAREST,
 }
 
+# MIME types for single file download
+MIME_TYPES = {
+    "png": "image/png",
+    "jpeg": "image/jpeg",
+    "jpg": "image/jpeg",
+    "gif": "image/gif",
+    "bmp": "image/bmp",
+    "webp": "image/webp",
+    "tga": "image/x-tga",  # Common MIME type for TGA
+}
+
 
 # --- Helper Functions ---
 
@@ -152,7 +164,7 @@ Upload one or more images (including **TGA** files{' and **SVG**' if cairosvg_av
 Configure your desired conversion options in the sidebar on the left.
 Supported input formats: **{", ".join(SUPPORTED_INPUT_FORMATS).upper()}**.
 Supported output formats: **{", ".join(SUPPORTED_OUTPUT_FORMATS)}**.
-Click 'Convert Images' to process and download a ZIP file containing the results.
+Click 'Convert Images' to process and download the results.
 """
 )
 if not cairosvg_available:
@@ -516,20 +528,44 @@ if uploaded_files:
                     else:
                         st.error(msg)
 
-        # If there are successfully processed images, create and offer the ZIP download
+        # --- Download Buttons ---
         if processed_images:
+            # --- Add single file download button if exactly one file was converted ---
+            if success_count == 1:
+                single_filename, single_file_bytes = processed_images[0]
+                single_file_ext = (
+                    output_format_lower  # Already stored from sidebar selection
+                )
+                mime_type = MIME_TYPES.get(
+                    single_file_ext, "application/octet-stream"
+                )  # Default MIME type
+
+                st.download_button(
+                    label=f"📥 Download Converted File ({single_filename})",
+                    data=single_file_bytes,
+                    file_name=single_filename,
+                    mime=mime_type,
+                    key="download_single_button",
+                )
+                st.markdown(
+                    "*(Or download as a ZIP archive below)*"
+                )  # Clarify ZIP option still exists
+
+            # --- Always offer the ZIP download button if any files were converted ---
             zip_buffer = create_zip_archive(processed_images)
             if zip_buffer:
+                zip_label = f"📥 Download All {success_count} Converted Image(s) (ZIP)"
                 st.download_button(
-                    label=f"📥 Download {success_count} Converted Image(s) (ZIP)",
+                    label=zip_label,
                     data=zip_buffer.getvalue(),  # Pass the bytes of the zip file
                     file_name=f"converted_images_{output_format_lower}.zip",  # Dynamic filename
                     mime="application/zip",  # Standard MIME type for ZIP files
-                    key="download_button",
+                    key="download_zip_button",  # Changed key slightly
                 )
             else:
                 # This message appears if the create_zip_archive function failed
                 st.error("Could not create the ZIP archive due to an internal error.")
+
         elif total_count > 0:
             # Message if files were uploaded but none could be processed
             st.warning("No images were successfully processed to download.")

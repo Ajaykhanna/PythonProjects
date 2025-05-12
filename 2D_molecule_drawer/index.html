@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Molecule Drawer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for better visualization */
+        body {
+            font-family: 'Inter', sans-serif; /* Use Inter font */
+        }
+        .toolbar-btn, .panel-btn, .element-btn, .export-btn {
+            @apply px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors duration-150 ease-in-out;
+        }
+        .toolbar-btn.active, .panel-btn.active, .element-btn.active {
+             @apply bg-indigo-100 border-indigo-300 ring-1 ring-indigo-300;
+        }
+        #periodic-table-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr)); /* Adjust columns as needed */
+            gap: 4px;
+        }
+        canvas {
+            cursor: crosshair; /* Default cursor for drawing */
+            display: block; /* Remove extra space below canvas */
+        }
+        /* Style for wedge/dash/squiggly bonds (will be drawn via JS) */
+        /* Placeholder - actual drawing logic is in JS */
+    </style>
+     <link rel="preconnect" href="https://fonts.googleapis.com">
+     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+
+    <div class="p-2 bg-gray-200 border-b border-gray-300 shadow-md">
+        <div class="flex space-x-2 items-center flex-wrap"> <span class="font-medium mr-2">Tools:</span>
+            <button id="tool-select" class="toolbar-btn active">Select/Move</button>
+            <button id="tool-atom" class="toolbar-btn">Add Atom</button>
+            <button id="tool-bond" class="toolbar-btn">Add Bond</button>
+            <button id="tool-delete" class="toolbar-btn">Delete</button>
+
+            <span class="font-medium ml-4 mr-2">Bonds:</span>
+            <button id="bond-single" data-bond-type="single" class="toolbar-btn active">Single</button>
+            <button id="bond-double" data-bond-type="double" class="toolbar-btn">Double</button>
+            <button id="bond-triple" data-bond-type="triple" class="toolbar-btn">Triple</button>
+            <span class="font-medium ml-4 mr-2">Config:</span>
+            <button id="config-normal" data-config-type="normal" class="toolbar-btn active">Normal</button>
+            <button id="config-wedge" data-config-type="wedge" class="toolbar-btn">Wedge</button>
+            <button id="config-dash" data-config-type="dash" class="toolbar-btn">Dash</button>
+            <button id="config-squiggly" data-config-type="squiggly" class="toolbar-btn">Squiggly</button>
+        </div>
+    </div>
+
+    <div class="flex flex-grow overflow-hidden">
+
+        <div class="w-48 bg-white border-r border-gray-300 p-3 overflow-y-auto flex-shrink-0">
+            <h3 class="text-lg font-semibold mb-3 text-gray-800">Common Structures</h3>
+            <div class="space-y-2">
+                <button data-structure="methane" class="panel-btn w-full text-left">Methane (CH₄)</button>
+                <button data-structure="ethane" class="panel-btn w-full text-left">Ethane (C₂H₆)</button>
+                <button data-structure="ethene" class="panel-btn w-full text-left">Ethene (C₂H₄)</button>
+                <button data-structure="ethyne" class="panel-btn w-full text-left">Ethyne (C₂H₂)</button>
+                <button data-structure="ethanol" class="panel-btn w-full text-left">Ethanol (C₂H₅OH)</button>
+                <button data-structure="benzene" class="panel-btn w-full text-left">Benzene (C₆H₆)</button>
+                <button data-structure="ammonia" class="panel-btn w-full text-left">Ammonia (NH₃)</button>
+                <button data-structure="carboxylic_acid" class="panel-btn w-full text-left">Carboxylic Acid (-COOH)</button>
+                 <button id="clean-structure" class="panel-btn w-full text-left text-blue-600 hover:bg-blue-50 mt-4">Clean Structure</button> <button id="clear-canvas" class="panel-btn w-full text-left text-red-600 hover:bg-red-50 mt-2">Clear Canvas</button>
+            </div>
+        </div>
+
+        <div class="flex-grow bg-gray-50 flex items-center justify-center p-4 overflow-hidden">
+             <div class="w-full h-full bg-white rounded-lg shadow-inner border border-gray-300 overflow-hidden">
+                 <canvas id="molecule-canvas"></canvas>
+            </div>
+        </div>
+
+        <div class="w-64 bg-white border-l border-gray-300 p-3 overflow-y-auto flex-shrink-0">
+            <h3 class="text-lg font-semibold mb-3 text-gray-800">Periodic Table</h3>
+            <div class="mb-2">
+                Selected Atom: <span id="selected-atom-display" class="font-bold">C</span>
+            </div>
+            <div id="periodic-table-grid">
+                <button data-element="H" class="element-btn">H</button>
+                <span class="col-span-4"></span> <button data-element="He" class="element-btn">He</button>
+                <button data-element="Li" class="element-btn">Li</button>
+                <button data-element="Be" class="element-btn">Be</button>
+                <span class="col-span-2"></span> <button data-element="B" class="element-btn">B</button>
+                <button data-element="C" class="element-btn active">C</button>
+                <button data-element="N" class="element-btn">N</button>
+                 <button data-element="O" class="element-btn">O</button>
+                 <button data-element="F" class="element-btn">F</button>
+                 <button data-element="Ne" class="element-btn">Ne</button>
+                 <button data-element="Na" class="element-btn">Na</button>
+                 <button data-element="Mg" class="element-btn">Mg</button>
+                 <span class="col-span-2"></span> <button data-element="Al" class="element-btn">Al</button>
+                 <button data-element="Si" class="element-btn">Si</button>
+                 <button data-element="P" class="element-btn">P</button>
+                 <button data-element="S" class="element-btn">S</button>
+                 <button data-element="Cl" class="element-btn">Cl</button>
+                 <button data-element="Ar" class="element-btn">Ar</button>
+                 <button data-element="Br" class="element-btn">Br</button>
+                 <button data-element="I" class="element-btn">I</button>
+
+            </div>
+        </div>
+
+    </div>
+
+    <div class="p-2 bg-gray-200 border-t border-gray-300 flex justify-between items-center">
+        <span id="status-message" class="text-sm text-gray-600">Ready. Select a tool or element.</span>
+        <button id="export-png" class="export-btn">Export as PNG</button>
+        </div>
+
+    <script>
+        // --- Constants and Configuration ---
+        const ATOM_RADIUS = 15; // px
+        const BOND_LENGTH = 50; // px - TARGET length for cleaning
+        const FONT_SIZE = 16; // px for atom labels
+        const HIT_TOLERANCE = 10; // px - How close to click to select atom/bond
+        const CLEAN_ITERATIONS = 10; // Number of iterations for cleaning
+        const CLEAN_STRENGTH = 0.5; // How strongly to pull atoms (0-1)
+
+        const COLORS = {
+            'C': '#222222', // Black
+            'H': '#cccccc', // Light Gray
+            'O': '#d62728', // Red
+            'N': '#1f77b4', // Blue
+            'S': '#ffbb78', // Yellow/Orange
+            'P': '#ff7f0e', // Orange
+            'F': '#90ee90', // Light Green
+            'Cl': '#2ca02c', // Green
+            'Br': '#a52a2a', // Brown
+            'I': '#9467bd', // Purple
+            'DEFAULT': '#888888' // Default color
+        };
+
+        // --- Application State ---
+        let atoms = []; // Array of atom objects: { id, element, x, y }
+        let bonds = []; // Array of bond objects: { id, atom1Id, atom2Id, type, config }
+        let nextAtomId = 1;
+        let nextBondId = 1;
+        let selectedAtom = 'C'; // Default element to add
+        let currentTool = 'select'; // 'select', 'atom', 'bond', 'delete'
+        let currentBondType = 'single'; // 'single', 'double', 'triple'
+        let currentConfigType = 'normal'; // 'normal', 'wedge', 'dash', 'squiggly'
+        let selectedAtomId = null; // For moving or deleting
+        let selectedBondId = null; // For deleting or changing type
+        let isDragging = false;
+        let dragStartX, dragStartY;
+        let bondStartAtomId = null; // For drawing bonds between two clicks
+        let canvasOffset = { left: 0, top: 0 }; // To correct mouse coordinates
+
+        // --- DOM Elements ---
+        const canvas = document.getElementById('molecule-canvas');
+        const ctx = canvas.getContext('2d');
+        const canvasContainer = canvas.parentElement;
+        const selectedAtomDisplay = document.getElementById('selected-atom-display');
+        const statusMessage = document.getElementById('status-message');
+
+        // --- Initialization ---
+        function init() {
+            resizeCanvas();
+            setupEventListeners();
+            updateToolbarButtons();
+            updateStatus('Ready. Select a tool or element.');
+            console.log('Molecule Drawer Initialized');
+            drawMolecule(); // Initial draw (empty canvas)
+        }
+
+        // --- Canvas Resizing ---
+        function resizeCanvas() {
+            // Get the container dimensions
+            const containerWidth = canvasContainer.clientWidth;
+            const containerHeight = canvasContainer.clientHeight;
+
+            // Set canvas dimensions (important for coordinate system)
+            canvas.width = containerWidth;
+            canvas.height = containerHeight;
+
+             // Calculate canvas offset relative to the viewport
+             const rect = canvas.getBoundingClientRect();
+             canvasOffset = { left: rect.left, top: rect.top };
+
+            console.log(`Canvas resized to ${canvas.width}x${canvas.height}`);
+            drawMolecule(); // Redraw after resize
+        }
+
+        // --- Drawing Functions ---
+        function drawMolecule() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white'; // Ensure background is white for export
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+
+            // Draw Bonds (draw first so atoms are on top)
+            bonds.forEach(bond => drawBond(bond));
+
+            // Draw Atoms
+            atoms.forEach(atom => drawAtom(atom));
+
+            // Draw bond-in-progress line if applicable
+            if (currentTool === 'bond' && bondStartAtomId !== null) {
+                const startAtom = atoms.find(a => a.id === bondStartAtomId);
+                if (startAtom) {
+                    // This needs mouse position, handled in mousemove event listener
+                    // For now, just log it
+                    // console.log("Need to draw line to mouse cursor from atom", bondStartAtomId);
+                }
+            }
+        }
+
+        function drawAtom(atom) {
+            ctx.beginPath();
+            ctx.arc(atom.x, atom.y, ATOM_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = COLORS[atom.element] || COLORS['DEFAULT'];
+            ctx.fill();
+            ctx.strokeStyle = '#333'; // Outline
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+
+            // Draw element symbol
+            ctx.fillStyle = getContrastColor(ctx.fillStyle); // White or black text
+            ctx.font = `${FONT_SIZE}px ${getComputedStyle(document.body).fontFamily}`; // Use body font
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(atom.element, atom.x, atom.y);
+
+             // Highlight selected atom
+             if (atom.id === selectedAtomId) {
+                ctx.strokeStyle = 'rgba(0, 120, 255, 0.7)';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+        }
+
+        function drawBond(bond) {
+            const atom1 = atoms.find(a => a.id === bond.atom1Id);
+            const atom2 = atoms.find(a => a.id === bond.atom2Id);
+
+            if (!atom1 || !atom2) {
+                console.error("Could not find atoms for bond:", bond);
+                return; // Skip drawing if atoms are missing
+            }
+
+            // Calculate bond vector and angle
+            const dx = atom2.x - atom1.x;
+            const dy = atom2.y - atom1.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            if (length === 0) return; // Avoid division by zero
+
+            const ux = dx / length; // Unit vector x
+            const uy = dy / length; // Unit vector y
+
+            // Shorten bond line slightly so it doesn't overlap atom centers
+            const startX = atom1.x + ux * ATOM_RADIUS;
+            const startY = atom1.y + uy * ATOM_RADIUS;
+            const endX = atom2.x - ux * ATOM_RADIUS;
+            const endY = atom2.y - uy * ATOM_RADIUS;
+
+            // --- Draw based on type and config ---
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#333333'; // Default bond color
+            ctx.fillStyle = '#333333'; // For wedge fill
+
+            const offset = 4; // Offset for double/triple bonds
+
+            switch (bond.type) {
+                case 'single':
+                    drawSingleBondLine(startX, startY, endX, endY, bond.config);
+                    break;
+                case 'double':
+                    // Calculate perpendicular offset vector
+                    const px = -uy * offset;
+                    const py = ux * offset;
+                    drawSingleBondLine(startX + px, startY + py, endX + px, endY + py, 'normal'); // Always draw double/triple as normal lines
+                    drawSingleBondLine(startX - px, startY - py, endX - px, endY - py, 'normal');
+                    break;
+                case 'triple':
+                    const px2 = -uy * offset * 1.5; // Wider offset for triple
+                    const py2 = ux * offset * 1.5;
+                    drawSingleBondLine(startX, startY, endX, endY, 'normal'); // Center line
+                    drawSingleBondLine(startX + px2, startY + py2, endX + px2, endY + py2, 'normal');
+                    drawSingleBondLine(startX - px2, startY - py2, endX - px2, endY - py2, 'normal');
+                    break;
+                default:
+                    drawSingleBondLine(startX, startY, endX, endY, 'normal'); // Fallback
+            }
+
+             // Highlight selected bond (draw a thicker, transparent line over it)
+             if (bond.id === selectedBondId) {
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = 'rgba(0, 120, 255, 0.5)';
+                ctx.beginPath();
+                ctx.moveTo(startX, startY);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            }
+        }
+
+        // Helper for drawing single lines with configuration styles
+        function drawSingleBondLine(x1, y1, x2, y2, config) {
+             ctx.beginPath();
+             ctx.moveTo(x1, y1);
+
+             switch(config) {
+                case 'wedge':
+                    // Draw a filled triangle
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    const length = Math.sqrt(dx*dx + dy*dy);
+                    if (length === 0) { ctx.lineTo(x2, y2); break; } // Avoid division by zero
+                    const ux = dx / length;
+                    const uy = dy / length;
+                    const wedgeWidth = 8; // Width at the base of the wedge
+                    // Perpendicular vector
+                    const px = -uy * wedgeWidth / 2;
+                    const py = ux * wedgeWidth / 2;
+                    ctx.lineTo(x2 - px, y2 - py);
+                    ctx.lineTo(x2 + px, y2 + py);
+                    ctx.closePath(); // Close path back to start (x1, y1)
+                    ctx.fill(); // Fill the wedge
+                    return; // Don't stroke separately for wedge
+
+                case 'dash':
+                    // Draw dashed line
+                    ctx.setLineDash([6, 4]); // [dash length, gap length]
+                    ctx.lineTo(x2, y2);
+                    break;
+
+                case 'squiggly':
+                    // Draw a wavy line (approximation)
+                    // This is more complex, requires multiple curve segments
+                    // Simple approximation: just draw a normal line for now
+                    // TODO: Implement proper squiggly line drawing
+                    ctx.lineTo(x2, y2);
+                    break;
+
+                case 'normal':
+                default:
+                    ctx.lineTo(x2, y2);
+                    break;
+             }
+             ctx.stroke();
+             ctx.setLineDash([]); // Reset dash pattern
+        }
+
+
+        // --- Event Handlers ---
+        function setupEventListeners() {
+            // Window resize
+            window.addEventListener('resize', resizeCanvas);
+
+            // Canvas interactions
+            canvas.addEventListener('mousedown', handleMouseDown);
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('mouseup', handleMouseUp);
+            canvas.addEventListener('mouseleave', handleMouseLeave); // Handle mouse leaving canvas
+
+            // Toolbar buttons
+            document.querySelectorAll('.toolbar-btn').forEach(btn => {
+                btn.addEventListener('click', handleToolbarClick);
+            });
+
+            // Periodic table elements
+            document.querySelectorAll('.element-btn').forEach(btn => {
+                btn.addEventListener('click', handleElementClick);
+            });
+
+             // Common structure buttons
+            document.querySelectorAll('.panel-btn[data-structure]').forEach(btn => {
+                btn.addEventListener('click', handleStructureClick);
+            });
+
+            // Clear canvas button
+            document.getElementById('clear-canvas').addEventListener('click', clearCanvas);
+
+            // Clean structure button <-- NEW
+            document.getElementById('clean-structure').addEventListener('click', cleanStructure);
+
+            // Export button
+            document.getElementById('export-png').addEventListener('click', exportPNG);
+        }
+
+        function handleMouseDown(event) {
+            const { x, y } = getMousePos(event);
+            selectedAtomId = null; // Deselect atom on new click unless reselected
+            selectedBondId = null; // Deselect bond
+
+            const clickedAtom = getAtomAt(x, y);
+            const clickedBond = getBondNear(x, y); // Check for bond click slightly *before* atom
+
+             if (currentTool === 'select') {
+                if (clickedAtom) {
+                    selectedAtomId = clickedAtom.id;
+                    isDragging = true;
+                    dragStartX = x - clickedAtom.x;
+                    dragStartY = y - clickedAtom.y;
+                    updateStatus(`Selected atom ${clickedAtom.element} (ID: ${clickedAtom.id}). Drag to move.`);
+                } else if (clickedBond) { // Allow selecting bonds in select mode
+                    selectedBondId = clickedBond.id;
+                    selectedAtomId = null; // Ensure atom is deselected
+                    updateStatus(`Selected bond (ID: ${clickedBond.id}). Change type/config via toolbar.`);
+                } else {
+                    // Allow clicking empty space to deselect
+                    isDragging = false;
+                    updateStatus('Select an atom to move or a tool to use.');
+                }
+            } else if (currentTool === 'atom') {
+                if (!clickedAtom) { // Only add if clicking empty space
+                    addAtom(selectedAtom, x, y);
+                    updateStatus(`Added ${selectedAtom} atom.`);
+                } else {
+                     updateStatus('Click empty space to add an atom.');
+                }
+            } else if (currentTool === 'bond') {
+                if (clickedAtom) {
+                    if (bondStartAtomId === null) {
+                        // Start drawing a bond
+                        bondStartAtomId = clickedAtom.id;
+                        updateStatus(`Started bond from ${clickedAtom.element}. Click target atom.`);
+                    } else {
+                        // Finish drawing a bond
+                        if (bondStartAtomId !== clickedAtom.id) {
+                            addBond(bondStartAtomId, clickedAtom.id, currentBondType, currentConfigType);
+                            updateStatus(`Added ${currentBondType} bond.`);
+                        } else {
+                             updateStatus(`Cannot bond atom to itself. Click target atom.`);
+                        }
+                        bondStartAtomId = null; // Reset for next bond
+                    }
+                } else {
+                    // Clicked empty space while trying to bond
+                    bondStartAtomId = null; // Cancel bond drawing
+                    updateStatus('Bond cancelled. Click starting atom.');
+                }
+            } else if (currentTool === 'delete') {
+                 // Prioritize deleting atom if both are clicked
+                if (clickedAtom) {
+                    deleteAtom(clickedAtom.id);
+                    updateStatus(`Deleted atom ${clickedAtom.element}.`);
+                } else if (clickedBond) {
+                     deleteBond(clickedBond.id);
+                     updateStatus(`Deleted bond.`);
+                } else {
+                    updateStatus('Click an atom or bond to delete.');
+                }
+            }
+
+            drawMolecule(); // Redraw to show selection/changes
+        }
+
+
+        function handleMouseMove(event) {
+            if (!isDragging || currentTool !== 'select' || selectedAtomId === null) {
+                // Add logic here later to show a line preview when drawing a bond
+                return; // Only move if dragging in select mode with an atom selected
+            }
+
+            const { x, y } = getMousePos(event);
+            const atom = atoms.find(a => a.id === selectedAtomId);
+            if (atom) {
+                atom.x = x - dragStartX;
+                atom.y = y - dragStartY;
+                updateStatus(`Moving atom ${atom.element}...`);
+                drawMolecule(); // Redraw continuously during drag
+            }
+        }
+
+        function handleMouseUp(event) {
+             if (isDragging) {
+                 const atom = atoms.find(a => a.id === selectedAtomId);
+                 if (atom) {
+                    updateStatus(`Moved atom ${atom.element} to (${Math.round(atom.x)}, ${Math.round(atom.y)}).`);
+                 }
+             }
+            isDragging = false;
+            // Don't reset bondStartAtomId here, allows completing bond on mouse up if needed
+        }
+
+         function handleMouseLeave(event) {
+            // If dragging an atom off canvas, stop dragging
+            if (isDragging) {
+                isDragging = false;
+                updateStatus('Movement stopped (mouse left canvas).');
+                // Optionally snap atom back or handle differently
+            }
+             // If drawing a bond and mouse leaves, cancel it
+             if (currentTool === 'bond' && bondStartAtomId !== null) {
+                 bondStartAtomId = null;
+                 updateStatus('Bond cancelled (mouse left canvas).');
+                 drawMolecule(); // Redraw to remove any temporary line
+             }
+        }
+
+
+        function handleToolbarClick(event) {
+            const button = event.currentTarget;
+            const id = button.id;
+
+            // Handle tool selection
+            if (id.startsWith('tool-')) {
+                currentTool = id.replace('tool-', '');
+                bondStartAtomId = null; // Cancel any pending bond draw
+                selectedAtomId = null; // Deselect atom when changing tools
+                selectedBondId = null; // Deselect bond
+                updateStatus(`Tool changed to: ${currentTool}`);
+            }
+            // Handle bond type selection
+            else if (id.startsWith('bond-')) {
+                currentBondType = button.dataset.bondType;
+                 // If a bond is selected, update its type
+                if (selectedBondId !== null) {
+                    const bond = bonds.find(b => b.id === selectedBondId);
+                    if (bond) {
+                        bond.type = currentBondType;
+                        drawMolecule();
+                        updateStatus(`Updated selected bond type to ${currentBondType}.`);
+                    }
+                } else {
+                    updateStatus(`Bond type set to: ${currentBondType}`);
+                }
+            }
+            // Handle config type selection
+            else if (id.startsWith('config-')) {
+                currentConfigType = button.dataset.configType;
+                 // If a bond is selected, update its config
+                if (selectedBondId !== null) {
+                    const bond = bonds.find(b => b.id === selectedBondId);
+                    if (bond) {
+                        // Only allow config changes for single bonds currently
+                        if (bond.type === 'single') {
+                             bond.config = currentConfigType;
+                             drawMolecule();
+                             updateStatus(`Updated selected bond config to ${currentConfigType}.`);
+                        } else {
+                             updateStatus(`Bond configuration only applies to single bonds.`);
+                        }
+                    }
+                } else {
+                    updateStatus(`Bond configuration set to: ${currentConfigType}`);
+                }
+            }
+
+            updateToolbarButtons();
+            setCanvasCursor();
+            drawMolecule(); // Redraw in case selection changed
+        }
+
+        function handleElementClick(event) {
+            selectedAtom = event.currentTarget.dataset.element;
+            selectedAtomDisplay.textContent = selectedAtom;
+            currentTool = 'atom'; // Switch to atom tool automatically
+            updateToolbarButtons();
+            setCanvasCursor();
+            updateStatus(`Selected element: ${selectedAtom}. Tool set to 'Add Atom'.`);
+
+             // Update active class on element buttons
+             document.querySelectorAll('.element-btn').forEach(btn => btn.classList.remove('active'));
+             event.currentTarget.classList.add('active');
+        }
+
+         function handleStructureClick(event) {
+            const structureName = event.currentTarget.dataset.structure;
+            loadPredefinedStructure(structureName);
+            updateStatus(`Loaded structure: ${structureName}`);
+         }
+
+         function clearCanvas() {
+            atoms = [];
+            bonds = [];
+            nextAtomId = 1;
+            nextBondId = 1;
+            selectedAtomId = null;
+            selectedBondId = null;
+            bondStartAtomId = null;
+            drawMolecule();
+            updateStatus('Canvas cleared.');
+         }
+
+        // --- Data Manipulation ---
+        function addAtom(element, x, y) {
+            const newAtom = { id: nextAtomId++, element, x, y };
+            atoms.push(newAtom);
+            drawMolecule();
+            return newAtom;
+        }
+
+        function addBond(atom1Id, atom2Id, type = 'single', config = 'normal') {
+            // Prevent duplicate bonds (simple check, might need refinement for multi-bonds)
+            const existingBond = bonds.find(b =>
+                (b.atom1Id === atom1Id && b.atom2Id === atom2Id) ||
+                (b.atom1Id === atom2Id && b.atom2Id === atom1Id)
+            );
+
+            // If a bond already exists, maybe upgrade it? (e.g. single -> double)
+            // For now, just prevent adding another identical bond.
+            if (existingBond) {
+                 // Allow upgrading single to double/triple, or changing config
+                 if (existingBond.type === type && existingBond.config === config) {
+                     updateStatus('Identical bond already exists.');
+                     console.warn("Attempted to add duplicate identical bond");
+                     return null;
+                 }
+                 // If types are different, maybe replace? Or add alongside?
+                 // Current logic just adds a new bond object. This might lead to
+                 // multiple bond objects between the same atoms if types differ.
+                 // A better approach would be to modify the existing bond's type.
+                 // Let's prevent adding *any* new bond if one exists for simplicity now.
+                 updateStatus('A bond already exists between these atoms.');
+                 console.warn("Attempted to add a bond where one already exists.");
+                 return null;
+
+            }
+
+
+            const newBond = { id: nextBondId++, atom1Id, atom2Id, type, config };
+            bonds.push(newBond);
+            drawMolecule();
+            return newBond;
+        }
+
+        function deleteAtom(atomId) {
+            // Remove the atom
+            atoms = atoms.filter(atom => atom.id !== atomId);
+            // Remove any bonds connected to this atom
+            bonds = bonds.filter(bond => bond.atom1Id !== atomId && bond.atom2Id !== atomId);
+            if (selectedAtomId === atomId) selectedAtomId = null;
+            if (bondStartAtomId === atomId) bondStartAtomId = null; // Cancel bond draw if start atom deleted
+            drawMolecule();
+        }
+
+         function deleteBond(bondId) {
+            bonds = bonds.filter(bond => bond.id !== bondId);
+            if (selectedBondId === bondId) selectedBondId = null;
+            drawMolecule();
+         }
+
+        // --- Structure Cleaning (Basic Bond Length) --- <-- NEW FUNCTION
+        function cleanStructure() {
+            if (atoms.length < 2 || bonds.length === 0) {
+                updateStatus("Not enough atoms/bonds to clean.");
+                return;
+            }
+            updateStatus("Cleaning structure (basic bond length)...");
+
+            // Store initial positions if we need an undo later (optional)
+            // const initialPositions = atoms.map(a => ({ id: a.id, x: a.x, y: a.y }));
+
+            for (let iter = 0; iter < CLEAN_ITERATIONS; iter++) {
+                // In each iteration, calculate adjustments for all bonds
+                const adjustments = atoms.map(a => ({ dx: 0, dy: 0, count: 0 }));
+
+                bonds.forEach(bond => {
+                    const atom1 = atoms.find(a => a.id === bond.atom1Id);
+                    const atom2 = atoms.find(a => a.id === bond.atom2Id);
+                    if (!atom1 || !atom2) return;
+
+                    const dx = atom2.x - atom1.x;
+                    const dy = atom2.y - atom1.y;
+                    const currentLength = Math.sqrt(dx * dx + dy * dy);
+
+                    if (currentLength < 1e-6) return; // Avoid division by zero if atoms overlap
+
+                    const difference = currentLength - BOND_LENGTH;
+                    const adjustment = difference * CLEAN_STRENGTH / 2; // Divide by 2 to move both atoms
+
+                    const ux = dx / currentLength; // Unit vector
+                    const uy = dy / currentLength;
+
+                    // Find indices in the adjustments array
+                    const idx1 = atoms.findIndex(a => a.id === atom1.id);
+                    const idx2 = atoms.findIndex(a => a.id === atom2.id);
+
+                    if (idx1 !== -1) {
+                        adjustments[idx1].dx += ux * adjustment;
+                        adjustments[idx1].dy += uy * adjustment;
+                        adjustments[idx1].count++;
+                    }
+                    if (idx2 !== -1) {
+                        adjustments[idx2].dx -= ux * adjustment;
+                        adjustments[idx2].dy -= uy * adjustment;
+                        adjustments[idx2].count++;
+                    }
+                });
+
+                // Apply averaged adjustments to atoms
+                atoms.forEach((atom, index) => {
+                    if (adjustments[index].count > 0) {
+                        // Avoid moving atoms with only one bond? Or maybe allow it?
+                        // Let's allow movement for now.
+                        atom.x += adjustments[index].dx / adjustments[index].count;
+                        atom.y += adjustments[index].dy / adjustments[index].count;
+                    }
+                });
+            } // End iterations
+
+            selectedAtomId = null; // Deselect after cleaning
+            selectedBondId = null;
+            drawMolecule();
+            updateStatus("Structure cleaning attempt complete (bond lengths).");
+        }
+
+
+        // --- Predefined Structures ---
+        function loadPredefinedStructure(name) {
+            clearCanvas(); // Start fresh
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+
+            // Define structures relative to center
+            // Coordinates are approximate and may need tweaking
+            switch(name) {
+                case 'methane':
+                    const c1 = addAtom('C', centerX, centerY);
+                    const h1 = addAtom('H', centerX, centerY - BOND_LENGTH);
+                    // Use angles closer to tetrahedral projection for H2, H3, H4
+                    const angle1 = -Math.PI / 2; // Up
+                    const angle2 = angle1 + 2 * Math.PI / 3; // ~120 deg right
+                    const angle3 = angle1 - 2 * Math.PI / 3; // ~120 deg left
+                    // Add a 4th H slightly offset - still not true tetrahedral in 2D
+                    const h2 = addAtom('H', centerX + BOND_LENGTH * Math.cos(angle2), centerY + BOND_LENGTH * Math.sin(angle2));
+                    const h3 = addAtom('H', centerX + BOND_LENGTH * Math.cos(angle3), centerY + BOND_LENGTH * Math.sin(angle3));
+                     const h4 = addAtom('H', centerX + BOND_LENGTH * 0.6, centerY + BOND_LENGTH * 0.8); // Approx position for 4th H
+
+                    addBond(c1.id, h1.id);
+                    addBond(c1.id, h2.id);
+                    addBond(c1.id, h3.id);
+                    addBond(c1.id, h4.id); // Add 4th bond
+                    break;
+                 case 'ethane':
+                    const c_eth1 = addAtom('C', centerX - BOND_LENGTH / 2, centerY);
+                    const c_eth2 = addAtom('C', centerX + BOND_LENGTH / 2, centerY);
+                    addBond(c_eth1.id, c_eth2.id);
+                    // Add hydrogens (simplified projection - try slightly better angles)
+                    const eth_angle = Math.PI / 3; // 60 deg
+                    addAtom('H', c_eth1.x - BOND_LENGTH * Math.cos(eth_angle), c_eth1.y - BOND_LENGTH * Math.sin(eth_angle)); addBond(c_eth1.id, nextAtomId -1);
+                    addAtom('H', c_eth1.x - BOND_LENGTH * Math.cos(eth_angle), c_eth1.y + BOND_LENGTH * Math.sin(eth_angle)); addBond(c_eth1.id, nextAtomId -1);
+                    addAtom('H', c_eth1.x + BOND_LENGTH * 0.3, c_eth1.y + BOND_LENGTH * 0.95); addBond(c_eth1.id, nextAtomId -1); // Approx 3rd H
+
+                    addAtom('H', c_eth2.x + BOND_LENGTH * Math.cos(eth_angle), c_eth2.y - BOND_LENGTH * Math.sin(eth_angle)); addBond(c_eth2.id, nextAtomId -1);
+                    addAtom('H', c_eth2.x + BOND_LENGTH * Math.cos(eth_angle), c_eth2.y + BOND_LENGTH * Math.sin(eth_angle)); addBond(c_eth2.id, nextAtomId -1);
+                    addAtom('H', c_eth2.x - BOND_LENGTH * 0.3, c_eth2.y - BOND_LENGTH * 0.95); addBond(c_eth2.id, nextAtomId -1); // Approx 3rd H
+                    break;
+                 case 'ethene':
+                     const c_ene1 = addAtom('C', centerX - BOND_LENGTH / 2, centerY);
+                     const c_ene2 = addAtom('C', centerX + BOND_LENGTH / 2, centerY);
+                     addBond(c_ene1.id, c_ene2.id, 'double');
+                     // Add hydrogens (trigonal planar projection ~120 deg)
+                     const ene_angle = Math.PI / 3; // 60 deg relative to horizontal bond vector
+                     addAtom('H', c_ene1.x - BOND_LENGTH * Math.cos(ene_angle), c_ene1.y - BOND_LENGTH * Math.sin(ene_angle)); addBond(c_ene1.id, nextAtomId -1);
+                     addAtom('H', c_ene1.x - BOND_LENGTH * Math.cos(ene_angle), c_ene1.y + BOND_LENGTH * Math.sin(ene_angle)); addBond(c_ene1.id, nextAtomId -1);
+                     addAtom('H', c_ene2.x + BOND_LENGTH * Math.cos(ene_angle), c_ene2.y - BOND_LENGTH * Math.sin(ene_angle)); addBond(c_ene2.id, nextAtomId -1);
+                     addAtom('H', c_ene2.x + BOND_LENGTH * Math.cos(ene_angle), c_ene2.y + BOND_LENGTH * Math.sin(ene_angle)); addBond(c_ene2.id, nextAtomId -1);
+                     break;
+                case 'benzene':
+                    const radius = BOND_LENGTH; // Use standard bond length for radius
+                    let angle = -Math.PI / 2; // Start at top
+                    const angleIncrement = Math.PI / 3; // 60 degrees
+                    const carbonAtoms = [];
+                    for (let i = 0; i < 6; i++) {
+                        const x = centerX + radius * Math.cos(angle);
+                        const y = centerY + radius * Math.sin(angle);
+                        carbonAtoms.push(addAtom('C', x, y));
+                        angle += angleIncrement;
+                    }
+                    // Add alternating double bonds
+                    for (let i = 0; i < 6; i++) {
+                        const nextIndex = (i + 1) % 6;
+                        const bondType = (i % 2 === 0) ? 'double' : 'single';
+                        addBond(carbonAtoms[i].id, carbonAtoms[nextIndex].id, bondType);
+                        // Add Hydrogens (pointing outwards along the radius)
+                        const dx = carbonAtoms[i].x - centerX;
+                        const dy = carbonAtoms[i].y - centerY;
+                        const norm = Math.sqrt(dx*dx + dy*dy); // Should be == radius
+                        const hx = carbonAtoms[i].x + (dx/norm) * BOND_LENGTH;
+                        const hy = carbonAtoms[i].y + (dy/norm) * BOND_LENGTH;
+                        const h = addAtom('H', hx, hy);
+                        addBond(carbonAtoms[i].id, h.id, 'single');
+                    }
+                    break;
+                 // TODO: Add Ethyne, Ethanol, Ammonia, Carboxylic Acid group etc.
+                default:
+                    console.warn("Predefined structure not implemented:", name);
+                    updateStatus(`Structure '${name}' not yet implemented.`);
+            }
+            // Optionally run clean structure after loading predefined one
+            // cleanStructure();
+            drawMolecule(); // Ensure final structure is drawn
+        }
+
+        // --- Utility Functions ---
+        function getMousePos(event) {
+            // Adjust mouse coordinates for canvas position and scaling
+            return {
+                x: event.clientX - canvasOffset.left,
+                y: event.clientY - canvasOffset.top
+            };
+        }
+
+        function getAtomAt(x, y) {
+            // Find the last atom in the array (topmost visually) that is under the cursor
+            for (let i = atoms.length - 1; i >= 0; i--) {
+                const atom = atoms[i];
+                const dx = x - atom.x;
+                const dy = y - atom.y;
+                if (dx * dx + dy * dy < (ATOM_RADIUS + HIT_TOLERANCE) * (ATOM_RADIUS + HIT_TOLERANCE)) { // Check within radius + tolerance
+                    return atom;
+                }
+            }
+            return null; // No atom found
+        }
+
+         function getBondNear(x, y) {
+             // Find bond whose line segment is closest to the click point
+             let closestBond = null;
+             let minDistanceSq = (HIT_TOLERANCE * 1.5) ** 2; // Use a slightly larger tolerance for lines
+
+             for (const bond of bonds) {
+                 const atom1 = atoms.find(a => a.id === bond.atom1Id);
+                 const atom2 = atoms.find(a => a.id === bond.atom2Id);
+                 if (!atom1 || !atom2) continue;
+
+                 // Calculate distance from point (x, y) to the line segment defined by atom centers
+                 const x1 = atom1.x, y1 = atom1.y;
+                 const x2 = atom2.x, y2 = atom2.y;
+
+                 const l2 = (x2 - x1)**2 + (y2 - y1)**2; // Squared length of the segment
+                 if (l2 === 0) { // Atoms overlap, check distance to the point
+                      const distSq = (x - x1)**2 + (y - y1)**2;
+                      if (distSq < minDistanceSq) {
+                          minDistanceSq = distSq;
+                          closestBond = bond;
+                      }
+                      continue;
+                 }
+
+                 // Project point (x,y) onto the line defined by the segment
+                 let t = ((x - x1) * (x2 - x1) + (y - y1) * (y2 - y1)) / l2;
+                 t = Math.max(0, Math.min(1, t)); // Clamp t to the segment [0, 1]
+
+                 // Calculate the closest point on the segment
+                 const closestX = x1 + t * (x2 - x1);
+                 const closestY = y1 + t * (y2 - y1);
+
+                 // Calculate the squared distance from (x,y) to the closest point on the segment
+                 const distSq = (x - closestX)**2 + (y - closestY)**2;
+
+                 if (distSq < minDistanceSq) {
+                     minDistanceSq = distSq;
+                     closestBond = bond;
+                 }
+             }
+
+             return closestBond;
+         }
+
+        function updateToolbarButtons() {
+            // Update tool buttons
+            document.querySelectorAll('.toolbar-btn[id^="tool-"]').forEach(btn => {
+                btn.classList.toggle('active', btn.id === `tool-${currentTool}`);
+            });
+            // Update bond type buttons
+             document.querySelectorAll('.toolbar-btn[id^="bond-"]').forEach(btn => {
+                 btn.classList.toggle('active', btn.dataset.bondType === currentBondType);
+            });
+             // Update config type buttons
+             document.querySelectorAll('.toolbar-btn[id^="config-"]').forEach(btn => {
+                 btn.classList.toggle('active', btn.dataset.configType === currentConfigType);
+            });
+        }
+
+        function setCanvasCursor() {
+            switch(currentTool) {
+                case 'select': canvas.style.cursor = 'grab'; break; // 'grab' or 'move'
+                case 'atom': canvas.style.cursor = 'copy'; break; // Or 'crosshair'
+                case 'bond': canvas.style.cursor = 'crosshair'; break;
+                case 'delete': canvas.style.cursor = 'not-allowed'; break; // Or custom 'eraser' cursor
+                default: canvas.style.cursor = 'default';
+            }
+             // Change cursor to grabbing when dragging
+             if (isDragging && currentTool === 'select') {
+                 canvas.style.cursor = 'grabbing';
+             }
+        }
+
+        function updateStatus(message) {
+            statusMessage.textContent = message;
+            console.log("Status:", message); // Log status for debugging
+        }
+
+        // Helper to get contrasting text color (black or white)
+        function getContrastColor(hexColor) {
+            if (!hexColor || hexColor.length < 7) return '#000000'; // Default to black if invalid
+            const r = parseInt(hexColor.substr(1, 2), 16);
+            const g = parseInt(hexColor.substr(3, 2), 16);
+            const b = parseInt(hexColor.substr(5, 2), 16);
+            const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return luminance > 0.5 ? '#000000' : '#ffffff'; // Black text on light bg, white text on dark bg
+        }
+
+        // --- Export Functionality ---
+        function exportPNG() {
+            // Ensure molecule is drawn cleanly before export
+            selectedAtomId = null; // Deselect atom
+            selectedBondId = null; // Deselect bond
+            drawMolecule(); // Redraw without selections
+
+            try {
+                const dataURL = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.href = dataURL;
+                link.download = 'molecule.png'; // Filename for download
+                document.body.appendChild(link); // Required for Firefox
+                link.click();
+                document.body.removeChild(link); // Clean up
+                updateStatus('Exported as PNG.');
+            } catch (error) {
+                console.error("Error exporting canvas:", error);
+                updateStatus('Error exporting image. See console for details.');
+                // Could show an error message to the user in the UI
+            }
+        }
+
+
+        // --- Run Initialization ---
+        // Use DOMContentLoaded to ensure elements are ready before accessing them
+        document.addEventListener('DOMContentLoaded', init);
+
+    </script>
+
+</body>
+</html>

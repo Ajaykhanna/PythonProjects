@@ -1,16 +1,44 @@
+"""Convert images to PDF with optional resizing, DPI and quality control.
+
+Usage:
+    python image_to_pdf.py <image_path> [-d DPI] [-w WIDTH] [-H HEIGHT] [-q QUALITY]
+
+This module reads an image file, optionally resizes it while preserving
+aspect ratio (unless both width and height are supplied), ensures the image
+is in RGB mode (compositing alpha over white when needed), and saves the
+result as a PDF alongside the input image.
+
+Examples:
+    python image_to_pdf.py sample.jpg -d 300 -w 800 -q 90
+"""
+
 import sys
 import argparse
 from PIL import Image
 import os
 
-# How to Run:
-# python image_to_pdf.py <image_path> [-d DPI] [-w WIDTH] [-H HEIGHT] [-q QUALITY]
-# Example:
-# python image_to_pdf.py sample.jpg -d 300 -w 800 -q 90
-# This will convert 'sample.jpg' to 'sample.pdf' with 300 DPI, width of 800 pixels, and quality of 90.
-
 
 def convert_image_to_pdf(image_path, dpi=300, width=None, height=None, quality=95):
+    """Convert a single image to a PDF file.
+
+    Parameters:
+        image_path (str): Path to the input image file.
+        dpi (int): Output PDF resolution in DPI (default: 300).
+        width (int|None): Target width in pixels. If provided without height,
+            the height will be computed to preserve aspect ratio.
+        height (int|None): Target height in pixels. If provided without width,
+            the width will be computed to preserve aspect ratio.
+        quality (int): JPEG quality for the PDF (1-100, default: 95).
+
+    Behavior:
+        - Saves the PDF to the same directory with the same base name and a .pdf extension.
+        - Prints progress and resulting file size.
+        - Exits the process with a non-zero code on error.
+
+    Raises:
+        SystemExit: If the input file does not exist or another error occurs
+                    during processing/saving.
+    """
     if not os.path.exists(image_path):
         print(f"Error: Image file '{image_path}' not found.")
         sys.exit(1)

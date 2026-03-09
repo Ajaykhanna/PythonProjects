@@ -10,3 +10,8 @@ python -c "import numpy as np; import matplotlib.pyplot as plt; data=np.load('ac
 
 # To print the statistics to the console:
 python -c "import numpy as np; data=np.load('acn_sE0.npy'); print(data.min()), print(data.max()), print(data.mean()), print(data.std())"
+
+# Python Command Line Options to Print Name and Shape of all files with extension*.npy Dataset:
+python3 -c "import glob, numpy as np; [print(f'├── {f}: {np.load(f).shape}') for f in sorted(glob.glob('*.npy'))]"
+
+
